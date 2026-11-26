@@ -160,3 +160,5 @@ Après une modification de `content/content.json`, de `render.mjs`, de `site.css
 | « Trop de tentatives » | 5 échecs de connexion | Attendre 15 minutes |
 | Messages du formulaire non reçus | Détection des formulaires inactive | Section 4 |
 | Modification publiée invisible | Cache du navigateur | Actualiser la page |
+| « Build blocked: Unrecognized Git contributor » | Offre gratuite + dépôt privé : l'auteur du dernier commit n'est pas reconnu | Relier son compte GitHub dans Netlify (*Link Git account*) et signer les commits avec l'identité GitHub du propriétaire du dépôt ; à défaut, rendre le dépôt public (aucun secret dans le code) |
+| « Default export … must be a function » en fonction edge | Un fichier non-fonction placé dans `netlify/edge-functions/` | Ne mettre dans ce dossier que des fonctions edge ; les modules partagés vont dans `netlify/shared/` |
