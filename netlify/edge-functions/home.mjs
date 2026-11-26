@@ -32,16 +32,17 @@ async function readPublished(request) {
 }
 
 export default async (request) => {
-  if (request.method !== 'GET' && request.method !== 'HEAD') return;
+  if (request.method !== 'GET') return;
   try {
     const entry = await readPublished(request);
     if (!entry || !entry.content) return; // rien de publié : page statique
     const html = renderDocument(entry.content, { assetVersion: ASSET_VERSION });
-    return new Response(request.method === 'HEAD' ? null : html, { headers: { ...HEADERS, etag: '"' + entry.version + '"' } });
+    return new Response(html, { headers: { ...HEADERS, etag: '"' + entry.version + '"' } });
   } catch (err) {
     console.error('Rendu serveur indisponible, page statique servie :', err && err.message);
     return;
   }
 };
 // onError « bypass » : en cas d'incident, la page statique est servie au lieu d'une page d'erreur.
-export const config = { path: '/', method: ['GET', 'HEAD'], onError: 'bypass' };
+// Méthodes acceptées par Netlify en edge : GET, POST, PUT, PATCH, DELETE, OPTIONS (pas HEAD).
+export const config = { path: '/', method: 'GET', onError: 'bypass' };
