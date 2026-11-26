@@ -1,0 +1,4 @@
+# Accès direct à l'administration (fonctionne aussi après actualisation de la page)
+/administration          /administration/index.html          200
+# Toute autre sous-adresse de l'administration renvoie vers l'interface (les fichiers existants restent prioritaires)
+/administration/*        /administration/index.html          200

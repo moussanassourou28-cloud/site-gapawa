@@ -1,0 +1,17 @@
+{
+  "name": "gapawa-smart-engineering",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Site institutionnel et administration de GAPAWA SMART ENGINEERING SARL",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "hash-password": "node scripts/hash-password.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@netlify/blobs": "^11.1.11"
+  }
+}

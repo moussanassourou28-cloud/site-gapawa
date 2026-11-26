@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /administration
+Disallow: /api/
+Disallow: /__forms.html
+
+Sitemap: https://gapawa.com/sitemap.xml
