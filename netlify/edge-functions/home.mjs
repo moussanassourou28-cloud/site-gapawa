@@ -3,8 +3,9 @@
  * Toute modification publiée depuis /administration est donc visible immédiatement, et indexable.
  * En l'absence de contenu publié, ou en cas d'incident, la page statique site/index.html est servie.
  */
+import { getStore } from '@netlify/blobs';
 import { renderDocument } from '../../site/assets/js/render.mjs';
-import { ASSET_VERSION } from './_version.mjs';
+import { ASSET_VERSION } from '../shared/version.mjs';
 
 const HEADERS = {
   'content-type': 'text/html; charset=utf-8',
@@ -20,7 +21,6 @@ const HEADERS = {
 /** Lit le contenu publié : directement dans Netlify Blobs, sinon via l'API serveur, sinon rien (page statique). */
 async function readPublished(request) {
   try {
-    const { getStore } = await import('@netlify/blobs');
     return await getStore({ name: 'gapawa-content', consistency: 'strong' }).get('current', { type: 'json' });
   } catch (err) {
     console.warn('Lecture directe du stockage impossible, repli sur /api/content :', err && err.message);
@@ -43,4 +43,5 @@ export default async (request) => {
     return;
   }
 };
-export const config = { path: '/', method: ['GET', 'HEAD'] };
+// onError « bypass » : en cas d'incident, la page statique est servie au lieu d'une page d'erreur.
+export const config = { path: '/', method: ['GET', 'HEAD'], onError: 'bypass' };

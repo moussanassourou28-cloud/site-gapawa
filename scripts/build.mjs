@@ -22,7 +22,9 @@ await writeFile(p('site', 'index.html'), renderDocument(content, { assetVersion 
 await mkdir(p('site', 'content'), { recursive: true });
 await writeFile(p('site', 'content', 'default.json'), JSON.stringify(content));
 await writeFile(p('site', 'asset-version.txt'), assetVersion);
-await writeFile(p('netlify', 'edge-functions', '_version.mjs'), `export const ASSET_VERSION = ${JSON.stringify(assetVersion)};\n`);
+await mkdir(p('netlify', 'shared'), { recursive: true });
+// Hors de netlify/edge-functions : Netlify traite chaque fichier de ce dossier comme une fonction edge.
+await writeFile(p('netlify', 'shared', 'version.mjs'), `export const ASSET_VERSION = ${JSON.stringify(assetVersion)};\n`);
 
 /* Squelette du formulaire pour Netlify Forms (la page d'accueil est rendue côté serveur). */
 await writeFile(p('site', '__forms.html'),
