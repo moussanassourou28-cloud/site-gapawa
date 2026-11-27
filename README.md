@@ -87,7 +87,17 @@ Les sessions ouvertes avec l'ancien mot de passe sont aussitôt invalidées.
 
 ## 4. Formulaire de contact
 
-Le formulaire utilise Netlify Forms (aucun serveur de messagerie à configurer).
+Chaque message envoyé depuis « Nous contacter » est traité de deux façons :
+
+- **Enregistré côté serveur** (fonction `/api/requests`, magasin Netlify Blobs `gapawa-requests`) et
+  consultable dans l'administration, rubrique **Clients → Demandes reçues** : liste, recherche, filtres
+  par statut (Nouvelle, En cours, Traitée, Archivée), note interne, réponse par e-mail / appel /
+  WhatsApp, export CSV pour Excel, suppression. La liste n'est lisible qu'avec une session
+  administrateur ; le dépôt public est validé, limité à 5 messages par heure et par connexion, et
+  l'adresse IP n'est pas conservée.
+- **Copié dans Netlify Forms**, ce qui permet de recevoir chaque demande par e-mail.
+
+Configuration de Netlify Forms (aucun serveur de messagerie à configurer) :
 
 1. *Forms → Enable form detection*, puis redéployez une fois.
 2. Les messages apparaissent dans *Forms → contact*.
@@ -136,8 +146,8 @@ fichier qui décide qui est authentifié.
 
 ## 8. Données et sauvegardes
 
-Le contenu publié et les images sont stockés dans Netlify Blobs (magasins `gapawa-content` et
-`gapawa-media`), indépendants des déploiements : un redéploiement n'efface rien. Les 20 dernières
+Le contenu publié, les images et les demandes clients sont stockés dans Netlify Blobs (magasins
+`gapawa-content`, `gapawa-media` et `gapawa-requests`), indépendants des déploiements : un redéploiement n'efface rien. Les 20 dernières
 versions publiées sont conservées automatiquement. `content/content.json` reste le contenu de secours,
 affiché tant que rien n'a été publié depuis l'administration.
 

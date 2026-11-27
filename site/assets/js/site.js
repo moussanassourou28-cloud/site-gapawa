@@ -136,9 +136,22 @@ if (form) {
     }
     btn.disabled = true; const label = btn.textContent; btn.textContent = 'Envoi en cours…';
     try {
-      const body = new URLSearchParams(new FormData(form)).toString();
-      const res = await fetch('/__forms.html', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const fd = new FormData(form);
+      // 1) Enregistrement côté serveur : la demande apparaît dans l'administration (rubrique « Demandes reçues »).
+      let saved = false, refusal = '';
+      try {
+        const r = await fetch('/api/requests', { method: 'POST', headers: { 'content-type': 'application/json', 'x-gapawa-request': '1' }, body: JSON.stringify(Object.fromEntries(fd)) });
+        if (r.ok) saved = true;
+        else if (r.status === 422 || r.status === 429) { const d = await r.json().catch(() => ({})); refusal = d.error || ''; }
+      } catch { /* serveur injoignable : on s'appuie sur Netlify Forms */ }
+      if (refusal) { const err = new Error(refusal); err.userMessage = refusal; throw err; }
+      // 2) Copie vers Netlify Forms (notifications par e-mail, export CSV) ; suffit à elle seule si l'étape 1 a échoué.
+      let forwarded = false;
+      try {
+        const res = await fetch('/__forms.html', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(fd).toString() });
+        forwarded = res.ok;
+      } catch { /* ignoré si l'étape 1 a réussi */ }
+      if (!saved && !forwarded) throw new Error('envoi impossible');
       form.reset(); delete form.elements.message.dataset.prefilled;
       $$('.f-err', form).forEach((n) => n.remove());
       if (success) { success.hidden = false; success.setAttribute('tabindex', '-1'); success.focus(); }
@@ -146,7 +159,7 @@ if (form) {
     } catch (err) {
       if (status) {
         status.classList.add('is-error');
-        status.textContent = "L'envoi n'a pas abouti. Réessayez dans un instant ou contactez-nous directement par téléphone ou par e-mail.";
+        status.textContent = err && err.userMessage ? err.userMessage : "L'envoi n'a pas abouti. Réessayez dans un instant ou contactez-nous directement par téléphone ou par e-mail.";
       }
     } finally { btn.disabled = false; btn.textContent = label; }
   });

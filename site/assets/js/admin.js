@@ -70,6 +70,11 @@ const NetlifyAdapter = {
   upload(blob, name) { const fd = new FormData(); fd.append('file', blob, name); return api('/api/media', { method: 'POST', body: fd }); },
   history: () => api('/api/history'),
   historyGet: (id) => api('/api/history/' + encodeURIComponent(id)),
+  requests: {
+    list: () => api('/api/requests'),
+    update: (id, patch) => api('/api/requests/' + encodeURIComponent(id), { method: 'PATCH', body: JSON.stringify(patch) }),
+    remove: (id) => api('/api/requests/' + encodeURIComponent(id), { method: 'DELETE' })
+  },
   previewDoc: (content) => renderDocument(content, { mode: 'preview' }).replace('<head>', `<head><base href="${location.origin}/">`),
   siteHref: '/'
 };
@@ -111,7 +116,7 @@ const ClaudeAdapter = {
     try { const r = await this._assets.upload(new File([blob], name, { type: blob.type })); return { ok: true, status: 200, data: { url: r.url } }; }
     catch (e) { return { ok: false, status: 500, data: { error: 'Téléversement refusé (' + ((e && e.code) || 'erreur') + ').' } }; }
   },
-  history: null, historyGet: null, previewDoc: null, siteHref: '#accueil'
+  history: null, historyGet: null, requests: null, previewDoc: null, siteHref: '#accueil'
 };
 
 /* ============================================================ préparation des images */
@@ -146,7 +151,7 @@ export async function mountAdmin({ mode, root } = {}) {
     }
   } else root.classList.add('gpa');
 
-  const S = { session: null, content: null, publishedJson: '', version: null, updatedAt: null, updatedBy: null, tab: 'overview', busy: false, status: null };
+  const S = { session: null, content: null, publishedJson: '', version: null, updatedAt: null, updatedBy: null, tab: 'overview', busy: false, status: null, newRequests: 0 };
   const toasts = h('div', { class: 'gpa-toasts', 'aria-live': 'polite' });
   let pillEl = null, publishBtn = null, previewFrame = null, mainEl = null;
   const appSnapshot = mode === 'claude' && document.getElementById('gpw-app') ? document.getElementById('gpw-app').innerHTML : null;
@@ -331,6 +336,159 @@ export async function mountAdmin({ mode, root } = {}) {
     ];
   }
 
+  /* ---------- demandes reçues (formulaire de contact) ---------- */
+  const REQ_STATUS = { nouveau: 'Nouvelle', en_cours: 'En cours', traite: 'Traitée', archive: 'Archivée' };
+  const RQ = { items: null, filter: 'actives', q: '', open: null };
+  async function refreshRequestCount() {
+    if (!adapter.requests) return;
+    try {
+      const r = await adapter.requests.list();
+      if (r.ok) { RQ.items = r.data.items || []; S.newRequests = RQ.items.filter((i) => i.status === 'nouveau').length; }
+    } catch { /* silencieux : le badge reste à jour au prochain passage */ }
+  }
+  function csvOf(items) {
+    const cols = [['createdAt', 'Date'], ['status', 'Statut'], ['nom', 'Nom'], ['societe', 'Société'], ['email', 'E-mail'], ['telephone', 'Téléphone'], ['sujet', 'Objet'], ['message', 'Message'], ['note', 'Note interne']];
+    const esc = (v) => { let t = String(v == null ? '' : v); if (/^[=+\-@\t\r]/.test(t)) t = "'" + t; return '"' + t.replace(/"/g, '""') + '"'; };
+    const rows = items.map((i) => cols.map(([k]) => esc(k === 'status' ? REQ_STATUS[i.status] || i.status : k === 'createdAt' ? fmtDate(i.createdAt) : i[k])).join(';'));
+    return '﻿' + cols.map(([, l]) => esc(l)).join(';') + '\r\n' + rows.join('\r\n');
+  }
+  function renderRequests(m) {
+    if (!adapter.requests) {
+      m.append(card('Demandes reçues', "Les demandes envoyées depuis le formulaire « Nous contacter » sont consultables ici une fois le site publié sur https://gapawa.com/administration. Dans cet aperçu, aucun message n'est enregistré."));
+      return;
+    }
+    const box = h('div', null, h('p', { class: 'gpa-desc' }, 'Chargement des demandes…'));
+    m.append(box);
+    const load = async () => {
+      const r = await adapter.requests.list();
+      if (r.status === 401) { onSessionLost(); return; }
+      if (!r.ok) { clear(box); box.append(card(null, null, h('p', { class: 'gpa-err' }, r.data.error || 'Impossible de lire les demandes.'), h('button', { class: 'gpa-btn gpa-btn--sm', type: 'button', onclick: load }, 'Réessayer'))); return; }
+      RQ.items = r.data.items || [];
+      S.newRequests = RQ.items.filter((i) => i.status === 'nouveau').length;
+      paint();
+    };
+    const setBadge = () => {
+      S.newRequests = RQ.items.filter((i) => i.status === 'nouveau').length;
+      const tab = root.querySelector('.gpa-tab[aria-current="page"]');
+      if (tab) { const old = tab.querySelector('.gpa-badge--new'); if (old) old.remove(); if (S.newRequests) tab.append(h('span', { class: 'gpa-badge gpa-badge--new' }, String(S.newRequests))); }
+      const n = (st) => String(RQ.items.filter((i) => i.status === st).length);
+      box.querySelectorAll('[data-rq-count]').forEach((el) => { const k = el.dataset.rqCount; el.textContent = k === 'total' ? String(RQ.items.length) : n(k); });
+    };
+    function visible() {
+      const q = RQ.q.trim().toLowerCase();
+      return RQ.items.filter((i) => {
+        if (RQ.filter === 'actives' && i.status === 'archive') return false;
+        if (RQ.filter !== 'actives' && RQ.filter !== 'toutes' && i.status !== RQ.filter) return false;
+        if (!q) return true;
+        return [i.nom, i.societe, i.email, i.telephone, i.sujet, i.message, i.note].some((v) => String(v || '').toLowerCase().includes(q));
+      });
+    }
+    function paint() {
+      clear(box);
+      const items = RQ.items;
+      const count = (s) => items.filter((i) => i.status === s).length;
+      box.append(h('div', { class: 'gpa-kpis gpa-kpis--rq' },
+        h('div', { class: 'gpa-kpi' }, h('b', { 'data-rq-count': 'nouveau' }, String(count('nouveau'))), h('span', null, 'à traiter')),
+        h('div', { class: 'gpa-kpi' }, h('b', { 'data-rq-count': 'en_cours' }, String(count('en_cours'))), h('span', null, 'en cours')),
+        h('div', { class: 'gpa-kpi' }, h('b', { 'data-rq-count': 'total' }, String(items.length)), h('span', null, 'au total'))));
+
+      const filters = [['actives', 'Actives'], ['nouveau', 'Nouvelles'], ['en_cours', 'En cours'], ['traite', 'Traitées'], ['archive', 'Archivées'], ['toutes', 'Toutes']];
+      const search = h('input', { class: 'gpa-in gpa-rq-search', type: 'search', placeholder: 'Rechercher un nom, une société, un mot…', 'aria-label': 'Rechercher dans les demandes', value: RQ.q });
+      const listEl = h('div', { class: 'gpa-rq-list' });
+      search.addEventListener('input', debounce(() => { RQ.q = search.value; paintList(); }, 200));
+      const exportBtn = h('button', { class: 'gpa-btn gpa-btn--sm', type: 'button', onclick: () => {
+        const rows = visible(); if (!rows.length) { toast('Aucune demande à exporter.'); return; }
+        const url = URL.createObjectURL(new Blob([csvOf(rows)], { type: 'text/csv;charset=utf-8' }));
+        const a = h('a', { href: url, download: 'demandes-gapawa-' + new Date().toISOString().slice(0, 10) + '.csv' }); document.body.append(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 2000);
+      } }, 'Exporter (Excel / CSV)');
+      box.append(card(null, null,
+        h('div', { class: 'gpa-rq-tools' },
+          h('div', { class: 'gpa-chips', role: 'group', 'aria-label': 'Filtrer par statut' }, filters.map(([v, l]) =>
+            h('button', { class: 'gpa-chip', type: 'button', 'aria-pressed': RQ.filter === v ? 'true' : 'false', onclick: () => { RQ.filter = v; paint(); } },
+              l, v !== 'actives' && v !== 'toutes' ? h('span', { 'data-rq-count': v }, String(count(v))) : null))),
+          h('div', { class: 'gpa-rq-actions' }, search, exportBtn, h('button', { class: 'gpa-btn gpa-btn--sm', type: 'button', onclick: load }, 'Actualiser'))),
+        listEl));
+      function paintList() {
+        clear(listEl);
+        const rows = visible();
+        if (!items.length) { listEl.append(h('p', { class: 'gpa-rq-empty' }, "Aucune demande reçue pour le moment. Les messages envoyés depuis « Nous contacter » apparaîtront ici.")); return; }
+        if (!rows.length) { listEl.append(h('p', { class: 'gpa-rq-empty' }, 'Aucune demande ne correspond à ce filtre.')); return; }
+        rows.forEach((it) => listEl.append(requestItem(it)));
+      }
+      paintList();
+    }
+    function requestItem(it) {
+      const open = RQ.open === it.id;
+      const statusSel = h('select', { class: 'gpa-in gpa-rq-status', 'aria-label': 'Statut de la demande de ' + it.nom },
+        Object.entries(REQ_STATUS).map(([v, l]) => { const o = h('option', { value: v }, l); if (v === it.status) o.selected = true; return o; }));
+      statusSel.addEventListener('change', async () => {
+        const prev = it.status; statusSel.disabled = true;
+        const r = await adapter.requests.update(it.id, { status: statusSel.value });
+        statusSel.disabled = false;
+        if (r.status === 401) { onSessionLost(); return; }
+        if (!r.ok) { statusSel.value = prev; toast(r.data.error || 'Mise à jour impossible.', { error: true }); return; }
+        Object.assign(it, r.data.item); setBadge(); toast('Statut : ' + REQ_STATUS[it.status] + '.');
+        if (RQ.filter !== 'toutes' && !(RQ.filter === 'actives' && it.status !== 'archive') && RQ.filter !== it.status) paint();
+        else el.className = 'gpa-rq is-' + it.status + (RQ.open === it.id ? ' is-open' : '');
+      });
+      const summary = h('button', { class: 'gpa-rq-head', type: 'button', 'aria-expanded': open ? 'true' : 'false', onclick: () => {
+        RQ.open = RQ.open === it.id ? null : it.id;
+        const fresh = requestItem(it); el.replaceWith(fresh);
+        if (RQ.open === it.id && it.status === 'nouveau') { statusAuto(it, fresh); }
+      } },
+        h('span', { class: 'gpa-rq-dot', 'aria-hidden': 'true' }),
+        h('span', { class: 'gpa-rq-who' }, h('b', null, it.nom), h('small', null, [it.societe, it.sujet].filter(Boolean).join(' · '))),
+        h('span', { class: 'gpa-rq-when' }, fmtDate(it.createdAt)));
+      const el = h('article', { class: 'gpa-rq is-' + it.status + (open ? ' is-open' : '') },
+        h('div', { class: 'gpa-rq-top' }, summary, statusSel));
+      if (open) {
+        const tel = telHref(it.telephone), mail = mailHref(it.email), wa = waHref(it.telephone);
+        const note = h('textarea', { class: 'gpa-in', rows: '3', id: 'rq-note-' + it.id, maxlength: '2000', placeholder: 'Ex. : rappelé le 28/11, devis envoyé…' }); note.value = it.note || '';
+        const saveNote = h('button', { class: 'gpa-btn gpa-btn--sm', type: 'button', onclick: async () => {
+          saveNote.disabled = true; const r = await adapter.requests.update(it.id, { note: note.value }); saveNote.disabled = false;
+          if (r.status === 401) { onSessionLost(); return; }
+          if (!r.ok) { toast(r.data.error || 'Enregistrement impossible.', { error: true }); return; }
+          Object.assign(it, r.data.item); toast('Note enregistrée.');
+        } }, 'Enregistrer la note');
+        const del = h('button', { class: 'gpa-btn gpa-btn--sm gpa-btn--danger', type: 'button', onclick: async () => {
+          if (!(await confirmDialog('Supprimer cette demande ?', 'La demande de ' + it.nom + ' sera effacée définitivement. Pour la garder sans l\'afficher, choisissez plutôt le statut « Archivée ».', 'Supprimer'))) return;
+          const r = await adapter.requests.remove(it.id);
+          if (r.status === 401) { onSessionLost(); return; }
+          if (!r.ok) { toast(r.data.error || 'Suppression impossible.', { error: true }); return; }
+          RQ.items = RQ.items.filter((x) => x.id !== it.id); RQ.open = null; setBadge(); paint(); toast('Demande supprimée.');
+        } }, 'Supprimer');
+        const replySubject = 'Votre demande — ' + (it.sujet || 'GAPAWA SMART ENGINEERING');
+        el.append(h('div', { class: 'gpa-rq-body' },
+          h('dl', { class: 'gpa-rq-dl' },
+            h('dt', null, 'E-mail'), h('dd', null, mail ? h('a', { href: mail + '?subject=' + encodeURIComponent(replySubject) }, it.email) : it.email),
+            h('dt', null, 'Téléphone'), h('dd', null, it.telephone ? (tel ? h('a', { href: tel }, it.telephone) : it.telephone) : '—'),
+            h('dt', null, 'Société'), h('dd', null, it.societe || '—'),
+            h('dt', null, 'Objet'), h('dd', null, it.sujet || '—'),
+            h('dt', null, 'Reçue le'), h('dd', null, fmtDate(it.createdAt))),
+          h('div', { class: 'gpa-rq-msg' }, it.message),
+          h('div', { class: 'gpa-rq-quick' },
+            mail ? h('a', { class: 'gpa-btn gpa-btn--sm gpa-btn--primary', href: mail + '?subject=' + encodeURIComponent(replySubject) }, 'Répondre par e-mail') : null,
+            tel ? h('a', { class: 'gpa-btn gpa-btn--sm', href: tel }, 'Appeler') : null,
+            wa ? h('a', { class: 'gpa-btn gpa-btn--sm', href: wa, target: '_blank', rel: 'noopener' }, 'WhatsApp') : null),
+          h('div', { class: 'gpa-f' }, h('label', { for: 'rq-note-' + it.id }, 'Note interne (visible uniquement dans l\'administration)'), note),
+          h('div', { class: 'gpa-rq-foot' }, saveNote,
+            h('span', { class: 'gpa-hint' }, it.updatedBy ? 'Dernière mise à jour par ' + it.updatedBy + ', le ' + fmtDate(it.updatedAt) : ''), del)));
+      }
+      return el;
+    }
+    async function statusAuto(it, el) {
+      // ouvrir une nouvelle demande la passe automatiquement « En cours »
+      const r = await adapter.requests.update(it.id, { status: 'en_cours' });
+      if (!r.ok) return;
+      Object.assign(it, r.data.item); setBadge();
+      const sel = el.querySelector('.gpa-rq-status'); if (sel) sel.value = it.status;
+      el.className = 'gpa-rq is-' + it.status + ' is-open';
+    }
+    if (RQ.items) paint();
+    load();
+  }
+
   /* ---------- panneaux ---------- */
   const PANELS = [
     { id: 'overview', group: 'Général', label: 'Tableau de bord', render(m) {
@@ -484,6 +642,7 @@ export async function mountAdmin({ mode, root } = {}) {
       m.append(card('Pied de page', 'La présentation courte se modifie dans « Identité et référencement ».',
         F.text('Ligne de copyright (après « © année »)', S.content.footer, 'left'), F.text('Slogan sous le logo', S.content.footer, 'right')));
     } },
+    { id: 'demandes', group: 'Clients', label: 'Demandes reçues', intro: 'Messages envoyés par les visiteurs depuis la section « Nous contacter ». Ils ne sont visibles que par les administrateurs connectés.', render: renderRequests },
     { id: 'historique', group: 'Outils', label: 'Historique', render(m) {
       if (!adapter.history) { m.append(card('Historique', 'Dans cet aperçu, chaque publication crée une nouvelle version de la page, consultable depuis l\'historique des versions de claude.ai.')); return; }
       const list = h('ul', { class: 'gpa-hist' }, h('li', null, 'Chargement…'));
@@ -529,14 +688,15 @@ export async function mountAdmin({ mode, root } = {}) {
     PANELS.forEach((p) => {
       if (p.group !== group) { group = p.group; side.append(h('p', { class: 'gpa-group' }, group)); }
       side.append(h('button', { class: 'gpa-tab', type: 'button', 'aria-current': S.tab === p.id ? 'page' : null, onclick: () => go(p.id) },
-        h('span', null, p.label), p.id === 'overview' && missing ? h('span', { class: 'gpa-badge' }, String(missing)) : null));
+        h('span', null, p.label), p.id === 'overview' && missing ? h('span', { class: 'gpa-badge' }, String(missing)) : null,
+        p.id === 'demandes' && S.newRequests ? h('span', { class: 'gpa-badge gpa-badge--new', title: 'Nouvelles demandes' }, String(S.newRequests)) : null));
     });
     const tabSel = h('select', { class: 'gpa-in gpa-tabselect', 'aria-label': 'Choisir une rubrique', onchange: (e) => go(e.target.value) },
       PANELS.map((p) => { const o = h('option', { value: p.id }, p.group + ' — ' + p.label); if (p.id === S.tab) o.selected = true; return o; }));
     mainEl = h('main', { class: 'gpa-main' });
     const panel = PANELS.find((p) => p.id === S.tab) || PANELS[0];
     mainEl.append(tabSel, h('div', { class: 'gpa-h' }, h('div', null, h('h1', { tabindex: '-1' }, panel.label),
-      h('p', null, 'Les modifications sont enregistrées en brouillon sur ce poste, puis appliquées au site lorsque vous cliquez sur « Publier les modifications ».'))));
+      h('p', null, panel.intro || 'Les modifications sont enregistrées en brouillon sur ce poste, puis appliquées au site lorsque vous cliquez sur « Publier les modifications ».'))));
     const draft = store.get(DRAFT_KEY);
     if (S.tab === 'overview' && draft && draft.content && draft.env === adapter.kind && JSON.stringify(migrate(draft.content)) !== JSON.stringify(S.content)) {
       const stale = draft.baseVersion !== S.version;
@@ -666,6 +826,7 @@ export async function mountAdmin({ mode, root } = {}) {
     const d = await adapter.load();
     S.content = d.content; S.publishedJson = JSON.stringify(d.content); S.version = d.version; S.updatedAt = d.updatedAt; S.updatedBy = d.updatedBy;
     paintEditor();
+    if (adapter.requests) refreshRequestCount().then(() => { if (S.newRequests && S.tab !== 'demandes') { paintEditor(); toast(S.newRequests + ' nouvelle(s) demande(s) client à traiter.', { action: { label: 'Voir', fn: () => go('demandes') }, ms: 9000 }); } });
   }
 
   async function start() {
