@@ -37,7 +37,8 @@ export default async (request) => {
     const entry = await readPublished(request);
     if (!entry || !entry.content) return; // rien de publié : page statique
     const html = renderDocument(entry.content, { assetVersion: ASSET_VERSION });
-    return new Response(html, { headers: { ...HEADERS, etag: '"' + entry.version + '"' } });
+    // l'ETag inclut la version du code : un nouveau déploiement invalide les pages gardées en cache par les navigateurs
+    return new Response(html, { headers: { ...HEADERS, etag: '"' + entry.version + '-' + ASSET_VERSION + '"' } });
   } catch (err) {
     console.error('Rendu serveur indisponible, page statique servie :', err && err.message);
     return;
