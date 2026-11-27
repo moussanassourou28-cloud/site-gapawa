@@ -110,7 +110,7 @@ Un piège à robots est intégré. Netlify ajoute son propre filtrage anti-spam.
 
 *Domain management → Add a domain* → `gapawa.com`, puis suivez les instructions DNS de Netlify.
 Le certificat HTTPS est fourni automatiquement. Si le domaine final diffère, corrigez « Adresse du site »
-dans *Administration → Identité et référencement* (utilisée pour le référencement et le partage).
+dans *Administration → Logo et identité* (utilisée pour le référencement et le partage).
 
 ## 6. Utiliser l'administration
 

@@ -23,7 +23,7 @@ export const DEFAULTS = {
     ogImage: ''
   },
   brand: {
-    name: 'GAPAWA SMART ENGINEERING', nameAccent: 'SARL', location: 'Figuil · Cameroun', logoUrl: '',
+    name: 'GAPAWA SMART ENGINEERING', nameAccent: 'SARL', location: 'Figuil · Cameroun', logoUrl: '', faviconUrl: '',
     about: "Ingénierie, travaux et maintenance industriels, fourniture d'équipements et quincaillerie générale, depuis Figuil, au cœur du bassin industriel du Nord-Cameroun."
   },
   theme: { night: '#0C1B2E', ochre: '#D9822B', teal: '#1F4E5F', sand: '#E0A54A', green: '#3F6E4D', brick: '#8C3A2B' },
@@ -464,6 +464,14 @@ export function themeCss(raw) {
     .map((k) => `--${k}:${safeColor(t[k], d[k])}`).join(';') + '}';
 }
 
+/* Icône d'onglet : celle choisie dans l'administration, sinon le logo, sinon le monogramme par défaut. */
+function iconLinks(c) {
+  const icon = safeMedia(c.brand.faviconUrl) || safeMedia(c.brand.logoUrl);
+  if (icon) return `<link rel="icon" href="${esc(icon)}"><link rel="apple-touch-icon" href="${esc(icon)}">`;
+  return '<link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml"><link rel="icon" href="/assets/img/favicon-32.png" sizes="32x32" type="image/png">' +
+    '<link rel="apple-touch-icon" href="/assets/img/apple-touch-icon.png">';
+}
+
 export function structuredData(c) {
   const K = c.contact, base = str(c.meta.siteUrl).replace(/\/+$/, '') || DEFAULTS.meta.siteUrl;
   const logo = safeMedia(c.brand.logoUrl);
@@ -500,8 +508,7 @@ export function renderDocument(raw, opts = {}) {
     '<meta name="twitter:card" content="summary_large_image">' +
     `<meta name="twitter:title" content="${esc(c.meta.title)}"><meta name="twitter:description" content="${esc(c.meta.description)}">` +
     `<meta name="twitter:image" content="${esc(ogAbs)}">` +
-    '<link rel="icon" href="/assets/img/favicon.svg" type="image/svg+xml"><link rel="icon" href="/assets/img/favicon-32.png" sizes="32x32" type="image/png">' +
-    '<link rel="apple-touch-icon" href="/assets/img/apple-touch-icon.png">' +
+    iconLinks(c) +
     '<link rel="preload" href="/assets/fonts/archivo-var.woff2" as="font" type="font/woff2" crossorigin>' +
     '<link rel="preload" href="/assets/fonts/plex-sans-400.woff2" as="font" type="font/woff2" crossorigin>' +
     `<link rel="stylesheet" href="/assets/css/site.css${v}"><style>${themeCss(c)}</style>` +

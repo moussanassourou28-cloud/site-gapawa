@@ -505,13 +505,15 @@ export async function mountAdmin({ mode, root } = {}) {
       if (adapter.kind === 'netlify') m.append(card('Formulaire de contact', null,
         h('p', { class: 'gpa-desc' }, "Les messages envoyés depuis le site sont reçus dans l'espace Netlify du site (rubrique Forms). Pour les recevoir par e-mail, ajoutez une notification « Email » dans Netlify : Project configuration → Notifications → Emails and webhooks.")));
     } },
-    { id: 'identite', group: 'Général', label: 'Identité et référencement', render(m) {
+    { id: 'identite', group: 'Général', label: 'Logo et identité', render(m) {
       const b = S.content.brand, meta = S.content.meta, t = S.content.theme;
+      m.append(card('Logo et icône du site', "Le logo s'affiche dans l'en-tête, le pied de page et les résultats Google. L'icône apparaît dans l'onglet du navigateur et sur l'écran d'accueil des téléphones.",
+        row(F.image('Logo de GAPAWA', b, 'logoUrl', { logo: true, hint: 'PNG à fond transparent ou SVG, format carré de préférence. Sans logo, la lettre « G » est affichée.' }),
+          F.image("Icône d'onglet (facultatif)", b, 'faviconUrl', { logo: true, hint: "Image carrée, simple et lisible en tout petit (512 × 512 px idéalement). Si elle est vide, le logo est utilisé." }))));
       m.append(card('Identité', 'Nom affiché dans l\'en-tête, le pied de page et les résultats de recherche.',
         row(F.text('Nom de l\'entreprise', b, 'name'), F.text('Mot mis en couleur', b, 'nameAccent', { hint: 'Par exemple « SARL ».' })),
         F.text("Sous-titre sous le nom", b, 'location'),
-        F.area('Présentation courte (pied de page)', b, 'about', { rows: 3, max: 260 }),
-        F.image('Logo', b, 'logoUrl', { logo: true, hint: 'PNG à fond transparent ou SVG, format carré de préférence. Sans logo, un monogramme est affiché.' })));
+        F.area('Présentation courte (pied de page)', b, 'about', { rows: 3, max: 260 })));
       m.append(card('Référencement et partage', 'Ce que Google et les réseaux sociaux affichent pour votre site.',
         F.text('Titre de la page', meta, 'title', { max: 70, hint: 'Idéalement 50 à 65 caractères.' }),
         F.area('Description', meta, 'description', { rows: 3, max: 160, hint: 'Idéalement 120 à 160 caractères.' }),
@@ -639,7 +641,7 @@ export async function mountAdmin({ mode, root } = {}) {
         F.area('Texte de consentement', FM, 'consent', { rows: 2 }), F.area('Message de confirmation', FM, 'success', { rows: 2 })));
     } },
     { id: 'pied', group: 'Contenus', label: 'Pied de page', render(m) {
-      m.append(card('Pied de page', 'La présentation courte se modifie dans « Identité et référencement ».',
+      m.append(card('Pied de page', 'La présentation courte se modifie dans « Logo et identité ».',
         F.text('Ligne de copyright (après « © année »)', S.content.footer, 'left'), F.text('Slogan sous le logo', S.content.footer, 'right')));
     } },
     { id: 'demandes', group: 'Clients', label: 'Demandes reçues', intro: 'Messages envoyés par les visiteurs depuis la section « Nous contacter ». Ils ne sont visibles que par les administrateurs connectés.', render: renderRequests },
